@@ -1,0 +1,45 @@
+Arguments: 
+  /usr/bin/node /usr/local/bin/yarn vuepress dev docs
+
+PATH: 
+  /home/hujunkang/anaconda3/envs/py38/bin:/home/hujunkang/anaconda3/condabin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin
+
+Yarn version: 
+  1.22.19
+
+Node version: 
+  12.22.9
+
+Platform: 
+  linux x64
+
+Trace: 
+  SyntaxError: /home/hujunkang/vuepress/package.json: Unexpected string in JSON at position 199
+      at JSON.parse (<anonymous>)
+      at /usr/local/lib/node_modules/yarn/lib/cli.js:1629:59
+      at Generator.next (<anonymous>)
+      at step (/usr/local/lib/node_modules/yarn/lib/cli.js:310:30)
+      at /usr/local/lib/node_modules/yarn/lib/cli.js:321:13
+
+npm manifest: 
+  {
+    "name": "mypack",
+    "version": "1.0.0",
+    "description": "for learning",
+    "main": "index.js",
+    "author": "Junkang Hu",
+    "license": "MIT",
+    "devDependencies": {
+      "vuepress": "^1.9.8"
+    }
+    "scripts": {
+      "docs:dev": "vuepress dev docs",
+      "docs:build": "vuepress build docs"
+    }
+  }
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile

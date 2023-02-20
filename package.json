@@ -1,0 +1,21 @@
+{
+  "name": "mypack",
+  "version": "1.0.0",
+  "description": "for learning",
+  "main": "index.js",
+  "author": "Junkang Hu",
+  "license": "MIT",
+  "devDependencies": {
+    "vuepress": "^1.9.8",
+    "@neilsustc/markdown-it-katex": "^1.0.0",
+    "markdown-it-task-lists": "^2.1.1",
+    "markdown-it-footnote": "",
+    "markdown-it-mark": "",
+    "markdown-it-attrs": ""
+
+  },
+  "scripts": {
+    "docs:dev": "vuepress dev docs",
+    "docs:build": "vuepress build docs"
+  }
+}
