@@ -134,11 +134,15 @@ actually, it's replacing the version in working directory with the version in th
         git remote add origin git@github.com:junkanghu/xxx.git # origin is the name of remote repo, we can use other names
         ```
         xxx is the name of remote repo.
-    3. push local files to remote linked repo for the first time
+    4. 由于在github创建repo时已经有README等，直接push无法成功（remote有本地不存在的内容），因此需要先pull
         ```
-        git push -u origin master # -u only used in the first time
+        git pull origin main --allow-unrelated-histories
         ```
-    4. modify local files in repo and repush
+    5. push local files to remote linked repo for the first time
+        ```
+        git push -u origin master -f # -u only used in the first time
+        ```
+    6. modify local files in repo and repush
         ```
         git push origin master
         ``` 
