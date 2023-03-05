@@ -1,4 +1,7 @@
 # Inverse rendering
+
+<link rel="stylesheet" href="/katex.min.css">
+
 [[toc]]
 
 ## Physg: Inverse Rendering with Spherical Gaussians for Physics-based Material Editing and Relighting
@@ -266,6 +269,11 @@ Lumos使用了非常多的loss，比如在synthetic-to-real adaption中使用的
 
 ## Neural Video Portrait Relighting in Real-time via Consistency Modeling
 
+### usage
+1. 获得face parsing的方法
+2. optical flow library
+3. 如何计算parsing loss（binary cross entropy）
+
 ### innovation
 
 #### problems in previous work
@@ -282,12 +290,35 @@ Lumos使用了非常多的loss，比如在synthetic-to-real adaption中使用的
 
 
 ### brief summary
+xxx first disentangles the lighting and the structure in a semantic-aware manner， and then using triplets of training samples generated from their lighting condition sampling stage to model the illumination consistency and mutation for relighting under natutal environment.
+
+## thinking process
+1. 目的：做一个支持dynamic illuminations的video的relighting。
+2. 难点：
+   1. 没有数据集：自己用OLAT生成
+   2. 需要解决temporal consistency：temporal stage
+3. 搭建思路
+   1. 如何操纵light，像DPR一样在Unet的bottleneck处生成predicted light或加入target light。
+   2. 这样train出来的结果，在脸部的不同区域（眼睛、眉毛）等几乎有一样的材质，原因是网络无法感知semantic information，因此加一个parsing输出，使得网络能够aware。
+   3. 这样输出的结果，可能导致了structure的不够稳定（脸部geometry），因此再加一个latent structure code的self-supervised的loss，使其更加准确。
+   4. 基本框架已经搭好，接下去就是要model temporal了。由于用的是OLAT数据集，本身自带temporal信息，因此可以用OLAT的相邻两帧信息做flow loss。但是相邻两帧用了不同的envmap去做relighting生成了training数据，所以用了共轭方式交换light，使得场景抑制，即可做flow loss。
+   5. 这样生成的结果在natural-captured videos上生成的结果，帧与帧之间not consistency，可能的原因是training samples与natural video不一致（相邻两帧的envmap完全不一致，网络可能难以学习），因此要结合拍摄的video的特性来考虑解决这个问题：拍摄的video所处的环境光可能是high-frequency的，也可能是low-frequency的，因此数据集也要有这样的样本。于是有了后面的lighting conditions sampling stage。
 
 ### methodology
+1. 因为脸部不同部分的材质不同，如果没有语义信息的先验，网络会平等对待它们，导致最后relighting结果出现artifacts。因此加了一个parsing loss，使得网络能够semantic-aware，生成semantic-consistency的结果（即不同脸部材质区域展现不同结果的效果）。
+2. 本文的训练数据集是OLAT拍摄的，因此拍摄的image之间自然存在着时序信息（由控制设备预先定义），也就存在着可以计算optical flow的source pairs。但是OLAT images被用于做不同的relighting去生成用于train的relighting pairs，所以即使它们之间存在着时序，但是image content不同，无法直接加flow loss。
+3. lighting conditions sampling的目的：
+   1. 做的事情就是生成temporal training stage的training sample，即生成其中的输入的相邻两帧的relit images和target relit image。对于OLAT images来说，就是生成三个lighting condition来做linear addition生成relit images。
+   2. 本文的目的是对naturally captured videos进行relighting，在这样的video中，相邻两帧的images的environment map是不同（脸部的任何微小转动使得虽然场景的envmap是不变的，但是射向脸部的light变了，即envmap做了一个旋转，类似于变成了另外一种envmap），而这种不同取决于当前场景，如果当前场景的整体envmap比较平滑，这种变化就小，否则当一个非常强或非常弱的光源开始射向脸部时，这种变化就非常大，这两种效应分别被作者成为consistency和mutation。因此在后续生成相邻两帧的envmap时，采用Beta distribution可以保证相邻两帧的images的light condition变化很小（因为Beta distribution的pdf是两头大中间小，即生成的值大概率趋向于0或1，而不是0.4、0.5，这就使得结合两张images时，大部分的值来源于一张envmap，小部分的值来源于另一张envmap，来模拟lighting的微小变化）。这样不仅模拟了natural环境的consistency，也使得temporal training更加稳定，因为相似的pattern容易被学到。
+   3. 而对于lighting的mutation效应进行model时，作者把light stage上的光源到object的距离等效为1个单位，然后在距离object 1.5个单位的地方随机生成1-3个light point with random color，然后将它们投影到sphere上形成一张新的envmap以模拟mutation的envmap（这也是合理的，因为natural环境中，可能产生mutation的就是个别point light）。然后在所有生成的这种envmap中采样，combine到之前的envmap上，模拟mutation的target envmap。
 
 ---
 
 ## Single Image Portrait Relighting
+
+### usage
+1. 较为详细的用envmap结合light stage生成数据集的过程。
+2. OLAT tracking frames
 
 ### innovation
 
@@ -309,11 +340,16 @@ SIPR takes an encoder-decoder architecture to generate relit images from a singl
    1. image loss：relit image和gt算loss（利用mask只算foreground）
    2. illumination loss：将estimated light与gt算loss（需要乘上每个pixel的solid angle）
    3. re-rendering loss：将estimated light作为target light重新输入bottleneck，然后算relit image和input的loss。
-   4. 
 
+4. 估计light时为什么要用confidence map：对于某一张输入的image，如果其只含有脸颊左侧的内容，则用它去直接推测全局的environment map肯定是不合理的，它只能推测到envmap的左侧。在bottleneck处的feature的每个pixel的位置都对应着输入网络的image的某一小块（receptive view），这一小块encode了envmap某一块的信息，因此我们可以对每一个feature pixel回归一张envmap以及同分辨率的confidence（用来表示生成的envmap的每个pixel的可靠性），然后利用所有的confidence map对所有的envmap做weighted average。这样能够赋予网络更自由的能力去根据每一块区域估计envmap。
 ---
 
 ## Single Image Portrait Relighting via Explicit Multiple Reflectance Channel Modeling
+
+### usage
+1. 一个img-to-img relighting数据集。
+2. 如何获得gt shadow map和specular map。
+3. 在train不同stage时，可以先用前面stage的gt输入后面stage，使得后面stage收敛到一定程度。
 
 ### innovation
 
@@ -355,15 +391,19 @@ Different from previous works using end-to-end neural networks, this paper expli
 
 ## DPR：Deep Single-Image Portrait Relighting
 
+### usage
+1. 对high-resolution training images，可以先downsample在low reso images上train，然后在high-relo images上fine-tune。
+2. 可以用SfSNet（SfSNet: Learning Shape, Reflectance and Illuminance of Faces in the Wild.）来估计一张image的SH lighting。
+3. 若要生成synthetic relighting images：light和material之间的ambiguity可能导致relit结果不够photo-realistic，因此可以选择只在luminance channel进行PBR。
+4. 估计portrait normal的方式：用3DDFA获得coarse normal，然后用ARAP-based normal refinement algorithm进行refine。
+5. skip training：如果用unet结构，如果bottleneck的latent code需要encode一些重要的信息，则可以使用skip trainning，防止skip connection把过多的imformation pass到decoder中，使得bottleneck的信息过少。
+6. 对于一个value（color light、albedo等），如果其由intensity和色温组成，如果只要求衡量色温之间的distance，而不用管intensity，可以用invariant Mean Squared Error（Si-MSE）。
+
 ### innovation
 
-#### problems in previous work
-1. 现有的image-based relighting方法估计的face geometry和reflectance details可能不准，导致后续的relighting结果not photo-realistic。
-2. 
-
-#### improvements
-1. 对于1利用合成数据集先让network学习如何relighting，然后利用GAN去生成realistic的结果。
-
+1. 现有的image-based relighting方法估计的face geometry和reflectance details可能不准，导致后续的relighting结果not photo-realistic。本文利用合成数据集先让network学习如何relighting，然后利用GAN（natural image作为positive label）去生成realistic的结果。
+2. 第一个能够生成high-resolution images的方法（1024*1024）
+3. 利用ratio image去合成数据集（material被简化为albedo去生成）。
 
 ### brief summary
 DPR first generates a relighting dataset, then performs image-based relighting using an encoder-decoder architecture which manipulates SH-based lighting at the bottleneck.
@@ -591,6 +631,7 @@ First estimate the coarse geometry, material, light, then use the coarse informa
 ### innovation
 1. 在inference阶段，即对某个新拍摄的人做relighting时，只需要坐下来拍摄两张color gradient images即可，拍摄过程非常简单，避免了做optical flow，以及对被摄者静止的限制，因此也就可以用于拍摄dynamic的scenes。
 2. 可以生成任意light direction的OLAT image，这种dense结果能够在利用envmap时效果更好。
+3. 相对于cosine lobe来说，由于cosine lobe需要explicitly建模normal等，所以为了准确性，它们需要对light和camera的color primaries做一个alignment，但是在这里不需要explicitly得到这些东西，所以相当于这种alignment都由网络学习。
 
 ### thinking process
 1. spherical color gradient images包含有丰富的信息，包括reflectance、shadowing等，因此与其像之前explicitly去获得各种material，不如直接用网络去预测OLAT images。能够说得通的地方就是spherical color gradient images含有丰富的信息，可以用DP decodes直接获得OLAT images。
@@ -606,3 +647,86 @@ Given the two gradient images and light direction, xxx predicts the OLAT image r
    1. pretrained VGG loss
    2. specific VGG loss：作者认为pretrained VGG是在natural images上train的，无法捕捉当前task下的high frequency细节（specularity等），而specularity heavily depend on入射光方向，因此其想法是让整个network变得direction-aware。作者以VGG的network architecture预训练了一个网络，输入为gt image patches，输出为gt image拍摄时的light direction，即做了一个regression。可以理解为这个训练好的网络能够从输入image的specularity预测出light direction，而没有specularity的image难以预测出这个方向，那么用这个网络回归的方向去监督OLAT image的生成能够促使生成的image带有正确的specularity，这样才能保证回归的direction准确。
    3. sliding window pooling loss：作者认为即使在对training image进行optical flow校正后，还会存在noise，这种noise会导致网络无法较好地学习。因此首先用这个loss将gt image的optical flow校准到最佳。
+
+---
+
+## Deep reflectance fields: high-quality facial reflectance field inference from color gradient illumination
+
+### setting
+1. light：ambient light and directional point flash light（co-located with camera，so flash visibilty=1）
+   1. 每个light都被建模为色温（代表颜色）*强度（可以嵌入visibility）
+   2. 所有pixel的ambient色温和flash色温都被认为是一样的
+2. material assumption：lambertian
+
+### usage
+1. 对pretrained object segmentation network在portrait上进行fine-tune。然后进一步计算visual hull estimation  
+2. 用Metashape也可以做sfm。
+3. 算mask loss既可以用cross entropy loss，也可以用Dice function。
+4. PRNet（Joint 3D Face Reconstruction and Dense Alignment with Position Map Regression Network）可以将face map到texture map（predefined space）上
+
+### problems in pervious work
+1. capture device复杂
+
+### innovation
+1. new rendering equation
+2. handheld smartphone as capture device which is easy to perform
+
+### thinking process
+1. 简化rendering equation，使其能够得到该有的intermediate components以model复杂的rendering过程。
+2. 加各种loss促进decomposition。
+
+### brief summary
+xxx first uses off-the-shell sfm software to get point cloud and descriptors for each point, and then passes the rasterized descriptors to the neural rendering network
+, whose outputs are fusing by their simplified rendering equation.
+
+### methodology
+rendering equation：
+$$
+\mathcal{I}=A \cdot C^{\mathrm{room}} \cdot S+\mathrm{F} \cdot A \frac{C^{\text {flash }}}{d^2}\left\langle N,-\omega_o\right\rangle
+$$
+
+1. 首先用Metashape得到point cloud和per-point descriptors。
+2. 然后用pretrained ${\rm U}^2$ Net（object segmentation network）在portrait上进行fine tune，进一步用visual hull去优化net，使其能够得到准确的mask作为gt。
+3. 然后将feature descriptors根据z-buffer rasterize到每张image上，把这些rasterized images过一个neural rendering net，获得albedo、normals、shadow map以及mask。（每张image都被加工为pyramid算loss）。
+4. loss
+   1. mask loss：同gt mask算loss（Dice function or cross-entropy loss）。
+   2. img-to-img loss：在relighting结果上加VGG以及L1 loss
+   3. TV loss on shadow map：在其rendering equation中，有ambient light部分以及flash light部分，两个部分中都有albedo，因此在优化时，albedo默认不会含有high-frequency details（共用的部分不能过于high-frequency，否则会导致两个part的结果在训练过程中不够稳定，只有当其比较low-frequency时，两个part的component才会比较稳定），这会导致在ambient部分，本该属于albedo的high frequency内容被baked into shadow map，因此给shadow map加一个TV，使其比较low-frequency，那么high-frequency内容只能被嵌入albedo。
+   4. normal loss：从PRNet可以估计出gt normal。
+   5. albedo symmetry loss：将估计出来的albedo通过PRNet映射到texture space。gt的albedo texture map来源于对每张training image都进行mapping，然后取所有image的median得到一张类albedo texture map（$T_F$），然后将其右半part进行flip（与左半part同shape），并与左半part求average，得到一张只含左半part的texture map($T_A$)，对其进行flip得到整张albedo map，以其作为监督。这利用了人脸的symmetry prior。
+   6. albedo color matching loss：对$T_F$与估计的albedo算一个L1 loss，用来使得albedo的color相近。
+5. 可优化的为：ambient light色温、albedo、shadow map、flash色温、feature descriptors。
+
+## NeRFactor: Neural Factorization of Shape and Reflectance Under an Unknown Illumination
+
+### setting
+1. light：unknown，即没有direct supervision。最后建模为一张16*32的envmap image。作者不用SH或SG的原因是，SH和SG都是low-frequency的，可能无法解释一些hard shadow，但是envmap可以。
+2. material中的specular部分是没有颜色的（achromatic）
+
+### usage
+1. 控制网络学习smoothness，就是在$f(x)$和$f(x + \epsilon)$加一个loss。
+2. Nerf的normal是通过对density求梯度算得，Nerf的visibility是通过算transmittance获得，而某条光线的intersection surface point是通过将volumetric rendering中的color替换成depth t来获得的。
+3. MERL dataset是真实世界的材质数据集。
+4. 由于albedo的亮度是任意的，因此在可视化时，一种可靠的做法是，取一个scale值，使得估计的albedo和gt albedo之间的MSE最小。
+5. 对isotropic BRDF的光源入射角和出射角的新的表示方法（从4自由度（$\theta_i$, $\phi_i$）变为3自由度($\theta_h$, $\theta_d$, $\phi_d$)），参考*A Data-Driven Reflectance Model*
+
+### key contribution
+提供了在Nerf帮助下不需要supervision做inverse rendering的方法。
+
+### thinking process
+1. 首先，作者想做一个relighting，但是没有现存的数据集支持做relighting。因此，其打算从Nerf入手去做。这样就可以从Nerf获得normal和visibility。
+2. 由于decomposition是一个非常ambiguous的问题，所以作者打算先pretrain normal和visibility，以利于后续albedo和light的training。但是发现直接给normal和visibility加l1 loss会导致优化出来的结果非常noisy，因此加了一个smooth loss。
+3. 然后由于albedo没有直接的supervision，只能加一个smooth loss试着优化。
+4. 对于BRDF，作者认为直接用microfacet，先验限制太强了，可能会影响真实世界的diverse材质的获得，因此决定用real-world material去得到一些材质信息。自然而然就想到用real-dataset去pretrain获得一个latent code的decoder，其可以将latent转换为真实世界的BRDF。然后在自己的数据集上train latent code，得到最终的specular的BRDF。在specular部分，作者认为反射的颜色都由albedo决定，因此specular是无色的。
+5. 最后对于light，作者在没有监督的情况下估计了一张envmap image。
+
+### brief summary
+Based on Nerf， xxx gets the pseudo supervision for normal and visibility to bootstrap the decomposition。
+
+### methodology
+1. 首先train一个Nerf。
+2. 然后算Nerf的intersection、visibility和normal，用它们来做decomposition的coarse supervision。
+3. 然后pretrain一个normal的MLP和一个visibility的MLP（都以intersection作为输入），用Nerf算出来的value做监督。这样是为了后续的decomposition有一个好的initialization。优化的loss都是一个l1 loss和一个smooth loss。有了一个好的visibility，才能够防止shadow被albedo和light所baked in。(在visibility中，smooth loss只对x加而不对$\omega$加，是因为)
+4. 然后是优化albedo，albedo由于没有直接的监督，只能在albedo上面加一个smoothness的priors监督，这个loss配合visibility能够更好地把shadow从albedo里面分离开来（如果没有visibility，当appearance为黑白相间时，无法分辨到底是本来的颜色就是黑白色，还是白色的surface表面有了shadow）。
+5. 为了得到specular BRDF，其在real-world dataset上pretrain一个latent code的decoder，用于将latent code解码得到BRDF。然后在自己的数据集上学一个encoder，用于将每个surface position编码成latent code，以得到BRDF。在算specular BRDF时，作者认为其是没有颜色的，颜色都来源于albedo。因此在pretrain时，color information都被解除了（grayscale），预测时也保证了BRDF的三通道都是一样的值。
+6. 最后估计一张envmap作为光源（没有监督）。

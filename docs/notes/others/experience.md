@@ -19,7 +19,13 @@ example：
 ``` shell
 open /Applications/ReadPaper\ (Beta).app
 ```
-3. 
+3. mac四指拖移失效
+   1. 打开活动监视器，找到程序坞进程，强制退出。
+   2. 直接在shell输入
+   ``` shell
+   killall Dock
+   ```
+4. 
 
 # 3d vision
 1. Iterate the faces or vertices of a mesh: using openmesh.

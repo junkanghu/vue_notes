@@ -7,13 +7,15 @@
 ## About papers
 [inverse rendering](/notes/paper/inverse_rendering)
 [neural rendering](/notes/paper/neural_rendering)
+[generating 3D model](/notes/paper/generating_3D_model)
 
 ## About projects
 [Lumos](/notes/project/Lumos)
 
 ## About codes
 [markdown](/notes/code/markdown)
-[git](/notes/code/git.md)
+[git](/notes/code/git)
+[latex](/notes/code/latex)
 [python]
 [pytorch]
 [numpy]
@@ -31,3 +33,5 @@
 [solutions for specific issues](/notes/others/answers)
 [inspirations from papers](/notes/others/inspiration)
 [existing problems in specific fields](/notes/others/problems-in-fields)
+[setup opengl](/notes/others/setup_opengl)
+[vscode extension](/notes/others/vscode_extension)
