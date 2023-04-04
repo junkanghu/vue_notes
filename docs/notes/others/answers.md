@@ -99,3 +99,41 @@ Nerf的normal是通过对density求梯度算得，Nerf的visibility是通过算t
 ## 现有的face recognition pretrained library ｜ 如何使portrait relighting时的face identity不改变
 Deep face Recognition
 其含有pretrained net，可以预测face identity的descriptor，我们可以用这个descriptor给face identity加loss。
+
+## 如何判断某些值是否发生了突变
+在计算某个view下某个值是否有突变时，可以将其投影到image上，算其Sobel算子（梯度），梯度大的地方代表发生了突变。参考IRON，利用这种方式检测edge pixels。
+
+## 如何提升latent code的效果
+参考Modeling Indirect Illumination for Inverse Rendering。
+可以对latent code施加KL散度
+
+## 如何建模indirect illumination
+参考Modeling Indirect Illumination for Inverse Rendering。
+用Nerf对场景进行建模。
+
+## train SDF net时候的初始化
+最好根据PhySG中引用的paper对SDF net进行初始化，使其shape为一个sphere，防止不收敛。
+
+## unsupervised inverse rendering能加的supervision
+参考InverseRenderNet。
+施加MVS supervision。
+
+## 对albedo如何施加smooth loss
+1. 对object来说，不能简单地对每一个pixel都加，因为object可能有颜色突变，要考虑对没有颜色突变的区域加loss。可以参看InverseRenderNet，采用颜色差异施加loss权重。
+2. 对人脸来说，可以直接对每个pixel都加smooth loss，因为颜色基本不会发生突变。
+
+## 如何构建statistics model来约束分布
+参考InverseRenderNet。
+
+## 获得portrait alpha matte/ portrait mask
+MODNet: Trimap-Free Portrait Matting in Real Time
+github: https://github.com/ZHKKKe/MODNet
+
+## 获得object mask的方式
+https://www.remove.bg/zh
+
+## directional light关于self-occlusion的visibility建模
+参考Sunstage。
+
+## 进行texture mapping（计算mesh到texture coordinate的映射）的方式
+xatlas库

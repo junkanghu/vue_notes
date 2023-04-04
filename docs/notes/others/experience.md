@@ -10,6 +10,7 @@
 
 4. 当torch或者numpy出现nan时，首先考虑是不是除0，查看代码所有含有/的地方，在分母处加上一个小的数，如1e-5，防止除0.
 5. 使用python的logging时，有时候若出现怎么都找不出来的错误，考虑一下是否third party库中对logging进行了重新配置。
+6. 如果要使用pip安装ffmpeg，不能使用```pip install ffmpeg```，而要使用```pip install ffmpeg-python```。
 
 ## about system
 1. 文件名不要带空格：首先，带空格无法在sell中表示；其次，带空格无法在代码中引用；最后，带空格的文件若是参与pc之间的共享，会造成传输识别错误或极度延迟。

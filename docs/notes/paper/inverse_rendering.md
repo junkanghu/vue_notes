@@ -4,6 +4,16 @@
 
 [[toc]]
 
+## 总结
+
+### Light stage
+优点：
+1. 不需要显式建模geometry、light、meterial，不需要考虑diffuse、specular、shadow、translucency、mutual illumination、subsurface scattering等各种具体appearance，而可以根据light的additive nature直接获得relighting结果。
+
+缺点：
+1. 硬件成本高，同步难度大。
+2. 对模特不太友好。
+
 ## Physg: Inverse Rendering with Spherical Gaussians for Physics-based Material Editing and Relighting
 
 ### problems in previous works 
@@ -94,11 +104,10 @@ In this figure, under the single viewpoint condition, algorithms without computi
 3. 当view direction与surface normal垂直时，代表我们看到的是object的edge。
 4. 比较重要的一个关于梯度计算的点：我们计算loss时本质上是要从loss back-propagate 到net weights的，但是在这里因为x的获得不是differential的，所以梯度没办法通过x back-propagate到network的weights中，因此需要reparameterize x。本质上来说要reparameter x，需要保证构造的equation在当前参数下的值($S_{\Theta}, n_0$)等于$x_0$，且当前参数下的梯度等于未构建实体equation而通过implicit function计算时的first-order梯度（因为算weight gradient时用的都是first-order），因此后续才有构造一个equation证明这两点的推导。
 5. 只对edge-pixels进行walk process来找edge surface points，而找这种edge pixels，是通过ray-tracing得到每一个pixel的depth之后，给每个pixel附上这个depth值，然后算Sobel 梯度，梯度较大的pixel说明其与周围的pixel之间存在depth突变，则其为edge pixels。
-6. Figure 2、4想要告诉我们的点时，在一个view point上进行训练时，IDR由于只计算演着view direction方向的t变化，导致shape只会在view direction方向被伸缩，而没办法往edge normal的方向伸缩，因此无法将一个初始化的sdf shape在edge normal方向慢慢通过优化拉伸变大。但事实上在multi-view训练时，由于每个viewpoint都几乎会被扫到，所以整个shape可以朝向各个方向被伸缩，最终达到准确的shape。
+6. Figure 2、4想要告诉我们的点时，在一个view point上进行训练时，IDR由于只计算沿着view direction方向的t变化，导致shape只会在view direction方向被伸缩，而没办法往edge normal的方向伸缩，因此无法将一个初始化的sdf shape在edge normal方向慢慢通过优化拉伸变大。但事实上在multi-view训练时，由于每个viewpoint都几乎会被扫到，所以整个shape可以朝向各个方向被伸缩，最终达到准确的shape。
 
 
 ### limitation
-
 
 ### some conceptions
 1. **edge pixel & interior pixel & subpixel**
@@ -124,6 +133,11 @@ In this figure, under the single viewpoint condition, algorithms without computi
 
 ## NeRV: Neural Reflectance and Visibility Fields for Relighting and View Synthesis
 
+### setting
+1. light：known environment light
+2. material：lambertian and microfacet specular BRDF
+3. geometry：normal from gradient of density
+
 ### innovation
 1. 相对于NeRF，解决了NeRF不能恢复material和进行relighting的缺点。
 2. 相对于一些传统方法，又可以利用NeRF重建3D model。
@@ -134,7 +148,7 @@ In this figure, under the single viewpoint condition, algorithms without computi
 定义：三个MLP
    1. 一个MLP输出每个point x的volume density $\sigma$，输入为x的坐标。（这里将volume density作为shape的表示，其实也可以理解，因为density越大的地方代表着有物体，空气的density小）
    2. 一个MLP输出每个point x的diffuse albedo（这里默认每个point没有specular分量来简化）和roughness。（遵循microfacet模型），输入为x的坐标。
-   3. 一个MLP输出在某个点沿着某个方向的visibility（衡量能不能看到light source，看得到light source时可利用这个MLP输出的visibility来计算radiance，看不到时认为是打到了物体上，被物体遮挡，此时可使用这个MLP的termination depth）和termination depth（从这个点到termination的距离）。这里的visibility其实就是NeRF中的transmittance（即volume density的积分），在NeRF中认为某个点的transmittance越低，其radiance（rgb）传输到camera的比例越少。
+   3. 一个MLP输出在某个点沿着某个方向的visibility（衡量能不能看到light source，看得到light source时可利用这个MLP输出的visibility来计算radiance，看不到时认为是打到了物体上，被物体遮挡，此时可使用这个MLP的termination depth）和termination depth（从这个点到termination的距离）。这里的visibility其实就是NeRF中的transmittance（即volume density的积分），在NeRF中认为某个点的transmittance越低，其radiance（rgb）传输到camera的比例越少。（visibility MLP的监督来源于shape MLP输出的density计算得到的transmittance和depth。其是通过在training阶段随机生成256条光线的结果做监督。）
 方法：
    1. 传到某一个camera pixel的radiance（rgb）由两部分组成，一个是direct illumination，一个是indirect illumination。
    2. 对某个pixel的渲染还是采用NeRF在ray上sample点的方式。不同的是，在NeRF中通过MLP获得每个点的rgb值，即认为每个点自己含有能量，能够emit radiance；但是在NeRV中，认为每个点本身不含能量，它们的能量来源于别的光线，即每个点朝向pixel发射的radiance来源于反射（遵循PBR）。
@@ -159,7 +173,7 @@ In this figure, under the single viewpoint condition, algorithms without computi
 #### training
 1. 利用一个MLP，输入point coordinate，输出该point的density、normal和计算BRDF的参数（基于不同的BRDF计算模型输出不同的参数）。
 2. 利用ray marching，在pixel对应的ray上进行sampling（同nerf），然后将sample points输入MLP得到上述参数。
-3. 利用这些参数算出任何一个sample point的transmittance，先用这个transmittance算出light到该point的intensity（$L_i(x,\omega_{i})=\tau_{l}(x)L_l(x)$），然后利用该点的BRDF参数算出BRDF，然后用BRDF、normal、incident light、light direction（同view direction）根据PBR算出该点沿着camera ray方向射向camera的radiance（nerf中不经过如此复杂的建模过程，而是直接用MLP获得这个radiance）。
+3. 利用这些参数算出任何一个sample point的transmittance，先用这个transmittance算出light到该point的intensity（$L_i(x,\omega_{i})=\tau_{l}(x)L_l(x)$，其中$L_l$中的下标l指的是distance导致的ray attenuation，而$\tau$指的是ray由于遮挡能够到达某一点的概率，可以理解为visibility），然后利用该点的BRDF参数算出BRDF，然后用BRDF、normal、incident light、light direction（同view direction）根据PBR算出该点沿着camera ray方向射向camera的radiance（nerf中不经过如此复杂的建模过程，而是直接用MLP获得这个radiance）。
 4. 得到ray上每个点的radiance后，再利用nerf的方法进行rendering（根据sampling进行coarse-to-fine）。
 
 #### testing
@@ -730,3 +744,132 @@ Based on Nerf， xxx gets the pseudo supervision for normal and visibility to bo
 4. 然后是优化albedo，albedo由于没有直接的监督，只能在albedo上面加一个smoothness的priors监督，这个loss配合visibility能够更好地把shadow从albedo里面分离开来（如果没有visibility，当appearance为黑白相间时，无法分辨到底是本来的颜色就是黑白色，还是白色的surface表面有了shadow）。
 5. 为了得到specular BRDF，其在real-world dataset上pretrain一个latent code的decoder，用于将latent code解码得到BRDF。然后在自己的数据集上学一个encoder，用于将每个surface position编码成latent code，以得到BRDF。在算specular BRDF时，作者认为其是没有颜色的，颜色都来源于albedo。因此在pretrain时，color information都被解除了（grayscale），预测时也保证了BRDF的三通道都是一样的值。
 6. 最后估计一张envmap作为光源（没有监督）。
+
+## InverseRenderNet: Learning single image inverse rendering
+
+### setting
+1. light：environment light parameterized by SH。
+2. material：diffuse
+3. unsupervised
+
+### usage
+1. 
+
+### key contribution
+1. unsupervised approach trained on real data。
+
+### brief summary
+Assuming a diffuse illumination model, xxx applies MVS supervision and albedo priors to boostrap the decompostion of light and albedo.
+
+### methodology
+1. rendering equation：$I = A \cdot L \cdot B(N)$。分别表示albedo、SH coefficients、basis。
+2. 输入image，估计albedo和normal，然后根据rendering equation，通过矩阵运算，得到$L$，对L施加一定的loss后，再用其进行rendering。
+3. 接下来就是对各种components施加supervision。
+   1. 首先是rendering loss，直接加在input image和predicted image上。
+   2. 对illumination加loss：尽管采用低阶SH，但是估计的light可能仍旧不natural。为了使其趋近natural分布，对所有envmap学一个statistic分布，然后利用这个分布约束估计的SH服从这个分布。
+   3. 从MVS中寻找constraints：
+      1. 首先从MVS估计normal，对normal加这个loss。
+      2. albedo是intrinsic quantity，因此不应该随view改变而改变。因此从overlapping程度高的两帧images（必须看起来有lighting variations，这样可以supervise light和albedo的 decomposition。）分别估计albedo，然后把一帧的albedo投影到另一帧，投影到的区域的albedo应该是一样的，给它们加一个loss。（这样可以内在的告诉网络，改变的只是light，而不是albedo，以促进light的decomposition）。注意：由于albedo存在ambiguity，作者对两个albedo加loss的时候，给其中一个albedo加了一个scale，这个scale是这样计算的$k = \sum{i=1} AA_{project} / \sum_{i=1} A_{project}^2$，对所有pixel求和得到。
+      3. 用projected过来的albedo再算一个rendering loss。
+   4. 用albedo priors加loss。
+      1. albedo smooth loss：由于setting中的光照是低频的，因此在相邻pixels上，光照不可能发生大的突变，且在当前setting下不存在specular，因此相邻区域不会由于specular发生颜色突变（由有颜色变为无颜色的highlight）, 故相邻pixels如果有颜色突变，不是light导致的，而应该是albedo导致的。大部分物体表面总有一块块的小区域是相同颜色。因此在input image上看到的颜色差异大的区域，一般确确实实是albedo发生了突变，在这样的区域就不应该加上albedo smooth，这显然是不合理的。我们只在颜色相近的区域施加albedo smooth loss。
+      2. 在最终training阶段，给pretrain的albedo和当前估计的albedo加一个similarity loss，防止divergence。（pretrain阶段使用的normal是MVS得到的coarse gt，而不是估计的normal，这样可以让网络先收敛到一定程度，此时能够得到一个估计的albedo）
+
+## NeROIC: Neural Rendering of Objects from Online Image Collections
+
+### setting
+1. light: SH。
+2. material model：phong model
+3. geometry：gt from nerf
+
+### usage
+1. 若拿background pixel算silhouette loss，即需要用到background pixels，最好一开始不要用到太多的background pixels，限制其在一定的数量之内，等网络收敛到一定程度后再加大数量。否则可能难以收敛。
+2. 一个relighting数据集。
+3. 解决nerf估计normal不准的一种方式。
+4. 得到object mask的方式：https://www.remove.bg/zh
+
+### key contribution
+1. 解决了nerf估normal不准的问题，使得后续渲染更加准确。
+2. 在online images上成功完成了relighting。（同Nerf in the wild一样的优点）
+
+### summary
+xxx first predicts scene geometry with the help of neural radiance field, and then predicts the lighting and material parameters with the fixed geometry.
+
+### methodology
+1. 先用Nerf in the wild的方式train一个neural radiance field（同时优化camera pose）。用到的loss有color loss、mask与ray attenuation之间的silhouette loss、transient density的regularization loss（与0算mse）、camera loss。
+2. 用neural radience field估计出surface point的coarse normal。作者发现直接用density算gradient，其normal效果较差，这是由于neural radiance field学出来的density大小方差很大，相邻区域的density差异可能很大，故会影响normal的估计。作者首先以所有的ray-surface intersection（depth根据weight的加权平均）形成一个point cloud，然后以其得到一个bounding box，然后将其voxelization，将每个voxel中心的density remap，使得若是其周围某个voxel的density非常大时，其对最终预测的normal的贡献会几乎为0，这就使得那些density正确的voxel对normal的估计贡献更大，更加精确。这个最后估计的normal作为gt被用于后续的normal supervision。
+3. 在已经得到normal后，固定它们不动，然后在像nerf一样在每条ray上sample点，在每个点处进行PBR，然后进行volumetric rendering，估计SH light和material得到predicted image。
+
+### thinking
+1. silhoutte loss的作用：如果直接将background pixels的颜色变成白色进行training，可能会导致在某一view下训练时，bg ray某一处的density学地较大。在novel view下，刚才的地方的density大于object处的density，直接导致这个air point的color替代了object的color。如下图所示，在训练$\vec{a}$时，$\sigma_t$可能被学成0.9，那么在对$\vec{b}$进行inference时，其颜色就替代了object的颜色。
+
+![ray](/images/neroic_ray.png)
+
+silhoutte loss以ray attenuation和mask算loss，能够使得bg rays的density都非常小，因为其supervision attenuation为0，这使得density（attenuation是density的积分）几乎都为0。
+
+2. Adaptive sampling的作用：极端一点设想，起初所有的ray都是bg ray，fg ray只有一条，那么网络倾向于把所有点的density都学成0，因此一开始要控制bg ray的数量。
+3. Hybrid Color Prediction using Transience的作用：由于SH代表的light是low frequency light，如果用于training的image中存在一些hard shadow或者highlights，它们是不可能通过用low-frequency的light进行PBR渲染得到的，因此我们在inference时，不可能得到这样的effect。但是这些effects确确实实又存在于training或inference image中，为了在training时得到与gt更接近的效果（或者在inference时得到更加合理的效果），作者不完全依赖于PBR，而是在PBR得到的color和neural radiance field中的color net估计出的当前点的color之间做一个插值，插值的比例来源于neural radiance field中的当前点的transient density。可以这样理解，在neural radiance field中，在train一个scene时，大部分的multi-view images反映的是物体本身的颜色（极端一点为albedo），而只在某几帧可以观察到shadow或者highlights，那么根据static和transient的学习能力，物体本身的颜色会被学到static scene中，而highlights和shadow会被学到transient scene中，因为transient之所以称为transient，是因为空间中同一个点，在大多数情况下看到的颜色是相同的，在某几个视角下不同，那么其就被称为transient。由于某些点的highlights和shadow被学到了transient中，故在这些点处的transient density会比较大，static density会比较小。因此，在这些点处，若transient density较大，则插值时，其transient color的权重比较大；若transient density较小，则插值时，其PBR得到的color的权重比较大。这样做的好处时，当我们用PBR推理不出合理的high-frequency 效果时，用neural radiance field学到的color来补充。
+4. Normal Extraction Layer的作用：由于training images的质量不高（blur、varing light），如果直接用density算梯度作为normal，其质量不高。原因是，density的学习不够精准，其体现在相邻density存在比较大的剧变，故算normal时（求梯度），不太精准。作者通过remap，将density的值缩小到一定的范围，这体现在梯度上的效果就是，如果density变化越大（代表学的不对，因为正确的density会比较平滑地变化），算出来的梯度（即normal）会越小，这代表着这个梯度对最终normal的贡献会更小，使得准确的梯度推理出来的normal占据主导。文中的Sobel kernel的作用是，以当前voxel周围一些voxels的density与其算梯度（作为normal）（x、y、z三个维度上的梯度组成了normal），将所有voxels与其梯度相加求平均作为当前voxel处的normal。因此如果周围有某一个voxel的density不准确，那么由这个voxel算出来的梯度就会不准确，进而影响normal的精度。而经过remap后，刚才的voxel处的梯度会被缩小，对最终的normal影响减小。求得空间中那么多voxel处的normal后，我们的surface point处的normal，可以通过对voxel进行插值获得。
+5. regularization loss：对specular BRDF加一个与0之间的loss，这是因为大多数object的material中specular的比例不大，因此，要防止由于$K_s$过大，直接取代了diffuse部分的颜色值，故给其加一个regularization；对tone-mapping的gamma值加loss，这是防止其过分远离2.4；对light intensity加一个loss，这是防止shadow处overfit，导致light为负值（其不可能为负值，color为黑色，只可能是shadow或者material的原因）。
+6. normal supervision loss：在这个loss中，以stage 1估计的normal的length作为confidence来算loss。其实这样做的效果，与将gt normal的长度归一化为到1是一样的，其本质就是想让优化出来的normal的长度接近1。
+7. Estimated Depth for Acceleration：按照weight确立的离散分布，若这条曲线的方差足够小（代表着surface点的weight非常大，比如为0.99，其它点的weight非常小），则直接取volume rendering出来的depth的点处的color去做PBR得到rendering结果，否则还是sample整条ray上的点都做PBR得到rendering结果。
+
+## SunStage: Portrait Reconstruction and Relighting using the Sun as a Light Stage
+
+### setting
+1. capture device: hand-held smart phone capturing a video sequence of a person rotating under the sun.
+2. light: ambient HDR map, sun light(directional light)
+3. material model: Blin-Phong model
+4. geometry: FLAME model
+
+### usage
+1. light的建模。
+2. directional light的visibility的计算。
+
+### key contribution
+1. capture device便捷。
+2. 解决了ambiguity。
+
+### summary
+xxx jointly optimizes geometry, material and lighting via a video of a person rotating under the sun.
+
+### methodology
+1. geometry用FLAME参数化模型来表示，针对输入video的每一帧都有一个coarse mesh。此外，还有一个global displacement map（uv map），用来对coarse mesh每个点进行normal方向的变形，因此其只记录一个scalar控制沿着normal方向变形的程度。这是用来model一些fine details（非刚性），例如皱纹。因此每一帧的geometry最后是由coarse mesh加displacement决定。
+2. material中，albedo是由uv map表示，specular component中的shiness和specular intensity被堆叠在一起，也由uv map表示。因此shiness和specular intensity都是spatially-varying的，而不是对所有face point都是shared。作者做了近似，specular分量只由sun light决定，因为ambient相对sunlight很弱。
+3. lighting：ambient light由16\*32\*3的HDR map表示；sun light的颜色为纯白，因此其只需要由一个scalar intensity和一个direction表示即可。
+4. visibility：针对sunlight设定，因为其有direction。首先在sunlight direction上放一个virtual orthographic camera，用其渲染一个z-buffer，得到每个point的$d_shadow$。在每个camera进行渲染时，首先得到ray-surface intersection，然后计算其到sunlight的depth $d_hit$，用$d_hit$和$d_shadow$进行比较，来决定visibility值。
+
+## Extracting Triangular 3D Models, Materials, and Lighting From Images
+
+### setting
+1. geometry：SDF value。提取mesh时不用marching cubes而是其它方法。
+2. light：优化出envmap，然后将其prefiltered，用split sum的方式进行real-time rendering。
+3. material：diffuse是lambertian，specular是microfacet GGX model。
+
+### usage
+1. 计算texture mapping的library：xatlas库。
+
+### key contribution
+其得到的各种component能够直接用于渲染引擎。
+
+### summary
+xxx jointly optimizes geometry, material and lighting, which can be applied to tradional graphic engine for rendering.
+
+### methodology
+1. geometry：用SDF表示，并且用除了marching cubes外的方法提取mesh，然后用differentiable rasterization得到2D shape。
+2. material：在geometry还没收敛的时候使用uv map作为material显然是不合理的，因为mapping也会时刻改变。因此首先用一个MLP，将一个3D坐标输入其中得到所有的material分量，然后进行rendering。等到geometry和这个MLP收敛到一定程度后，再利用*xatlas*算法得到uv mapping，利用mesh上的每个顶点输入MLP得到的material去初始化texture map。然后在固定geometry的基础上，继续优化texture map。
+3. lighting：利用split sum将rendering equation分开来。BRDF的部分进行pre-compute时，query的时候只需要输入$cos\theta$和roughness，因此可以将其存储为一个2维uv map，用这两个值去query（由于$cos\theta$和roughness是两个scalar，且是连续的，因此完全可以算出一些milestone，然后在training时得到roughness和$cos\theta$时，对这些milestones进行interpolation）。但是lighting部分，由于light完全是不可预知的，所以无法pre-compute然后interpolate得到。因此，若要以split sum方式计算，必须在每个iteration得到light后，再计算pre-filter的值。这要么通过importance sampling方式计算，要么直接在image level上根据lobe覆盖的区域convolve。
+
+## Light Stage Super-Resolution: Continuous High-Frequency Relighting
+
+### setting
+
+### usage
+
+### key contribution
+1. 节省了硬件成本：使得light stage的搭建不需要非常多的灯，而可以通过生成virtual light的方式弥补。
+2. 加快了拍摄速度，对用户友好：light数量少了，需要做同步的次数也少了，这可以节省许多做同步的帧，进而提高了单位时间内的有效帧帧率。
+
+### summary
+
+### methodology

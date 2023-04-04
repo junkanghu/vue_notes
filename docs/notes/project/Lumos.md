@@ -1,6 +1,17 @@
 # Lumos: Learning to Relight Portrait Images via a Virtual Light Stage and Synthetic-to-Real Adaptation
 [[toc]]
 
+## training process
+
+### synthetic
+1. normal直接加上L1 loss、vgg_api loss、length loss进行pretrain，网络最后一层不加激活函数。且在网络输出后，需要进行normalization，将其长度归一化到1。
+2. albedo pretrain直接加上所有loss，难以收敛。因此，首先以L1 loss先pretrain，使其收敛。然后再加上vgg_api和GAN loss进行train。
+3. 在对shading进行train时，如果直接对albedo同时进行fine tune，发现难以收敛。因此首先固定住normal和albedo，然后以所有loss train shading的网络。
+4. 在shading的网络训练好后，再同时优化albedo和shading。发现如果给shading加上GAN loss，无法收敛，因此去掉shading的GAN loss进行训练，发现shading结果能够收敛地好一点，但是albedo收敛地不是很好，loss几乎不降。因此也考虑将albedo的GAN loss去除，进行training，最后发现这样的setting下收敛地最好。
+
+### synthetic-to-real adaption
+1. 起初用128分辨率下的各个networks用于512分辨率的real data，加上所有的loss后，发现内容看不了。观察发现，coarse albedo就已经非常不合理，其与paper中给的效果来比差太多（paper中用synthetic数据训练的网络直接用于real data预测时，albedo大体是正确的，可能只会在衣服或脸部一些区域出现颜色错误，而不至于产生非常不合理的效果。而这部分颜色错误是通过adaption实现的。）。
+2. 考虑到coarse albedo就已经不太合理，因此首先需要把albedo部分调对。由于我们是在128分辨率上进行train的，因此考虑是否可能是因为我们将128上的网络直接用于512才效果不好。所以，首先要进行这个测试。在测试过程中发现，将512分辨率上fine tune过后的normal net直接用于128分辨率的合成数据集推测时，normal的结果不对。这证明了不同分辨率上train的结果在预测不同分辨率的image时确实会导致不好的效果。由于我们的albedo以及specular和rendering net都是在128上train的，且还未在512分辨率上进行fine tune，因此在train adaption时，也不能用512分辨率，而是用128分辨率。此外，paper中指出，它们对real data做了一个crop以适配自己合成数据集的FOV（field of view），因此也需要考虑real data的coarse albedo的效果不好是否是由于我们没做crop。因此，我对合成数据简单做了下crop并resize进行inference，发现这样确实会有一点的效果降低，但是不会有特别夸张的降质。
 
 ## 待思考或解决的问题
 1. 数据读取部分

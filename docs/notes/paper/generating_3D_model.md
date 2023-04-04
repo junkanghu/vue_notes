@@ -25,3 +25,36 @@ xxx generates a 3D mesh from a single image by incorporating the perceptual imag
    2. Normal loss：对于每个predicted mesh中的vertice，找到其所有的临近点，得到其与这些临近点的edges，作者认为这些edges应该与Chamber loss中找到的当前vertice在gt中的最近的点的normal垂直。这个loss可以保证，vertices的deformation不会生成过于steep的surface，能够保证较为smooth的surface。
    3. Laplacian regularization loss：完成一个deformation block代表经历了一次deformation。这个loss保证完成一次deformation之后，当前所有vertices相对于没有deformation之前的对应vertices，应该具有尽量相同的movement。这是为了防止deformation的过于随意性。
    4. Edge length regularization loss：防止flying vertices造成一个face特别大，因此加一个regularization使得每条edge的长度为0。
+
+## DIB-R: Learning to Predict 3D Objects with an Interpolation-based Differentiable Renderer
+
+### setting
+
+### usage
+
+### key contribution
+
+### brief summary
+
+### methodology
+
+### new knowledge
+为什么rasterization是不可微的？
+
+- 通常我们定义的MLP、CNN等，它们都是以矩阵运算的，最终的结果都是input关于weight的线性函数（非线形是由激活函数引入的，但是激活函数都是连续的，所以本质上整个函数是连续的），如$MLP(x)= activation_2(w_2(activation_1(w_1(x))))$。因此函数的输出可以对输入的$x$或者各个weight算梯度，因为函数都是连续的。
+- 3D坐标投影到2D坐标的过程都是矩阵运算，它们都是线性的，因此变换的函数$f$都是连续的，可微（可用$f$对$x,y,z$求导）。
+
+  $$
+    u = f(x, y, z)
+    v = f(x, y, z)
+  $$
+
+- 在计算某一个pixel的颜色值时，其颜色值为其所属三角形的三个vertices的插值
+
+$$
+\hat{I}_p = w_0(u, v, p) * i_a + w_1(u, v, p) * i_b + w_2(u, v, p) * i_c
+Loss = MSE(\hat{I}_p, I_p)
+$$
+
+- 若想要求loss对$x,y,z$的导数，来优化它们的坐标，则需要求$\hat{I}_p$对$w_0,w_1,w_2$的导数，进而求三个$w_n$对$u,v$的导数。
+- 若要能求$w_n$对$u,v$的导数，要求$w_n(u,v)$必须是连续函数。但是我们可以发现$w_n$函数在定义域内并不是连续的。举个例子，当$(u, v)$位于某一个三角形的顶点时，当微小的$\delta u$及$\delta v$使得$(u,v)$走出了当前三角形时，所有的$w_n$都会从原来的值瞬间突变到0，因此其并不是一个连续函数，不能简单求梯度。

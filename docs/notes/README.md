@@ -21,6 +21,7 @@
 [numpy]
 
 ## About courses
+[c++](/notes/course/c++)
 [opengl](/notes/course/learn_opengl)
 [games101](/notes/course/games101)
 [first principle of computer vision](/notes/course/first_principle.md)
@@ -35,3 +36,4 @@
 [existing problems in specific fields](/notes/others/problems-in-fields)
 [setup opengl](/notes/others/setup_opengl)
 [vscode extension](/notes/others/vscode_extension)
+[leetcode](/notes/others/leetcode)

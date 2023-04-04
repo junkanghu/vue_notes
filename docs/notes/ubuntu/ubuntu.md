@@ -569,3 +569,17 @@ sudo sshfs -o allow_other,follow_symlinks,IdentityFile=~/.ssh/id_rsa hujunkang@1
 ``` shell
 sudo sshfs -o reconnect,allow_other,follow_symlinks,IdentityFile=~/.ssh/id_rsa hujunkang@10.0.1.6:/ ~/mnt/
 ```
+
+## linux下替代cp的命令：rsync
+cp对已经存在的文件还会继续copy进行覆盖，但是rsync可以实现：1、对已经存在的内容不再重复copy。2、已经存在的内容，其内容不完全（比如上次copy时没有copy完），则使其copy完全。其本质是同步。
+
+``` shell
+rsync -avP /data/lumos/hu /dellnas/dataset/1/
+```
+
+## 在脚本中使用conda activate
+若直接在.sh脚本中运行```conda activate py38```会报错，需要在这个命令前加上别的命令。
+``` shell
+eval "$(conda shell.bash hook)"
+conda activate py38
+```
